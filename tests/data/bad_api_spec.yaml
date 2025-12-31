@@ -1,0 +1,65 @@
+openapi: 3.0.0
+info:
+  title: Bad API Example
+  version: 1.0.0
+  description: Test API
+
+paths:
+  # Violation: verb in path (should trigger semantic-verb-in-path)
+  /getUsers:
+    get:
+      operationId: getUsersList
+      summary: Get users
+      description: Gets users
+      responses:
+        "200":
+          description: OK
+
+  # Violation: RPC-style endpoint (should trigger design-rpc-in-rest)
+  /users/create:
+    post:
+      operationId: createUserRPC
+      summary: Create user
+      description: Creates a user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "200":
+          description: User created
+
+  # Violation: Poor description (should trigger semantic-poor-description)
+  /products:
+    get:
+      operationId: getProducts
+      summary: Get
+      description: Gets
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string

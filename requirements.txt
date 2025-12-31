@@ -1,0 +1,16 @@
+aiohttp>=3.9.1
+black>=23.12.0
+fastapi>=0.115.0
+fastmcp>=0.1.0
+jinja2>=3.1.0
+jsonschema>=4.20.0
+pydantic>=2.8.0,<3.0.0
+pytest-archon
+pytest-json-report
+pytest>=7.4.3
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+requests>=2.31.0
+ruff>=0.1.8
+sqlalchemy>=2.0.23
+uvicorn>=0.30.0

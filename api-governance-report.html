@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Governance Scan Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header p {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        .score-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 40px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .score-item {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .score-item-label {
+            font-size: 0.85em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .score-item-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+        .content {
+            padding: 40px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .section h2 {
+            font-size: 1.8em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        .section h3 {
+            font-size: 1.3em;
+            color: #555;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        .spec-files-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .spec-file-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .violations-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        .violations-section {
+            margin-bottom: 30px;
+        }
+        .violations-section h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .violations-list {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .violation-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-left: 5px solid #666;
+            padding: 20px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        .violation-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .violation-card.error {
+            border-left-color: #dc3545;
+            background: #fff8f8;
+        }
+        .violation-card.warning {
+            border-left-color: #ffc107;
+            background: #fffef8;
+        }
+        .violation-card.info {
+            border-left-color: #17a2b8;
+            background: #f8fdfe;
+        }
+        .violation-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            font-weight: bold;
+            font-size: 1.05em;
+        }
+        .violation-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            font-size: 0.95em;
+            color: #555;
+        }
+        .violation-field {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 15px;
+        }
+        .violation-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .violation-value {
+            color: #333;
+            word-break: break-word;
+        }
+        .violation-value code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .violation-context {
+            background: #f0f7ff;
+            border-left: 3px solid #667eea;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-style: italic;
+            color: #555;
+            line-height: 1.5;
+        }
+        .violation-context strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+        .recommendations {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .recommendations h2 {
+            color: white;
+            border-color: rgba(255,255,255,0.3);
+        }
+        .recommendations p {
+            line-height: 1.8;
+            opacity: 0.95;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 0.85em;
+            color: #666;
+            border-top: 1px solid #e9ecef;
+        }
+        @media (max-width: 768px) {
+            .header h1 { font-size: 1.8em; }
+            .violation-field { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏛️ API Governance Scan Report</h1>
+            <p>Generated on 2026-02-16 at 23:12:55</p>
+        </div>
+
+        <div class="score-card">
+            <div class="score-item"><div class="score-item-label">📊 Total Violations</div><div class="score-item-value">14</div></div>
+            <div class="score-item"><div class="score-item-label">🔴 Critical</div><div class="score-item-value" style="color: #dc3545;">7</div></div>
+            <div class="score-item"><div class="score-item-label">🟡 Warnings</div><div class="score-item-value" style="color: #ffc107;">7</div></div>
+            <div class="score-item"><div class="score-item-label">ℹ️ Info</div><div class="score-item-value" style="color: #17a2b8;">0</div></div>
+        </div>
+
+        <div class="content">
+            <!-- Project Info Section -->
+            <div class="section">
+                <h2>📋 Scan Summary</h2>
+                <p><strong>Scan Type:</strong> API Specification</p>
+                <p><strong>Project Path:</strong> <code>.</code></p>
+                <p><strong>Specifications Analyzed:</strong> 1</p>
+            </div>
+
+            <div class="section">
+                <h2>📁 Specification Files</h2>
+                <div class="spec-files-list">
+                    <div class="spec-file-item">📄 tests/data/bad_api_spec.yaml</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🔍 Automated Rules Results</h2>
+                <div class="violations-container">
+                    <div class="violations-section">
+                        <h3>🔴 Critical Issues (7)</h3>
+                        <div class="violations-list">
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>kebab-case-paths</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Path segment '/getUsers' must be kebab-case (lowercase with hyphens)</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./getUsers</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">8</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>no-crud-names</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Path '/getUsers' contains CRUD operation name. Use HTTP verbs instead</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./getUsers</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">8</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>versioning-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Path '/getUsers' must start with version (e.g., /v1/)</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./getUsers</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">8</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>no-verbs-in-url</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Path '/users/create[1]' contains verb. Use reified resources instead (e.g., POST /activations not /activate)</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./users/create</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">18</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>plural-resources</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Resource 'create' should be plural: 'creates'. (Use plural for collection resources. Singular is only acceptable for singleton resources like /me, /config, or /session)</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./users/create</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">18</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>versioning-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Path '/users/create' must start with version (e.g., /v1/)</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./users/create</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">18</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card error">
+                                <div class="violation-header">
+                                    <span>🔴</span>
+                                    <span>versioning-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Path '/products' must start with version (e.g., /v1/)</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./products</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">33</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="violations-section">
+                        <h3>🟡 Warnings (7)</h3>
+                        <div class="violations-list">
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>post-create-returns-201</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">POST operation should return 201 when creating resources</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./users/create.post.responses</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">28</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>array-fields-plural</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Array field 'schema' should use plural noun</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>paths./products.get.responses.200.content.application/json.schema</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">43</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>security-defined</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">OpenAPI spec should define security schemes</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>components</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">48</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>schema-description-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Schema property 'id.description' should have a description</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>components.schemas.User.properties.id</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">53</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>schema-description-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Schema property 'name.description' should have a description</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>components.schemas.User.properties.name</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">55</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>schema-description-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Schema property 'id.description' should have a description</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>components.schemas.Product.properties.id</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">61</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="violation-card warning">
+                                <div class="violation-header">
+                                    <span>🟡</span>
+                                    <span>schema-description-required</span>
+                                </div>
+                                <div class="violation-content">
+                                    <div class="violation-field">
+                                        <div class="violation-label">Message</div>
+                                        <div class="violation-value">Schema property 'name.description' should have a description</div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Path</div>
+                                        <div class="violation-value"><code>components.schemas.Product.properties.name</code></div>
+                                    </div>
+                                    <div class="violation-field">
+                                        <div class="violation-label">Line</div>
+                                        <div class="violation-value">63</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="recommendations">
+                    <h2>✅ Recommendations</h2>
+                    1. **Address Critical Issues:** You have 7 critical issue(s) that must be resolved to meet governance standards.<br>2. **Review Warnings:** 7 warning(s) should be addressed to improve API quality and consistency.<br>3. **Validate Changes:** After making corrections, re-run this scan to verify compliance.<br>4. **Documentation:** Update your API documentation to reflect any changes made.
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>API Governance Scan Report • All violations have been analyzed for compliance with governance standards</p>
+        </div>
+    </div>
+</body>
+</html>
