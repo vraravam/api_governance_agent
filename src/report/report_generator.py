@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -19,7 +18,7 @@ class ReportGenerator:
         content = self._generate_content()
 
         # Write to file
-        output_path.write_text(content)
+        FileUtils.write_text(str(output_path), content)
 
     def generate_json(self, output_path: Path, include_categories: bool = False):
         """Generate a JSON report from scan results
@@ -33,6 +32,8 @@ class ReportGenerator:
         all_violations = (
             self.scan_result.spectral_results + self.scan_result.llm_results
         )
+
+        severity_counts = ViolationUtils.count_by_severity(all_violations)
 
         data = {
             "meta": {
@@ -72,23 +73,24 @@ class ReportGenerator:
                 "summary": category_summary,
             }
 
-        output_path.write_text(json.dumps(data, indent=2))
+        FileUtils.write_json(str(output_path), data)
 
     def _generate_content(self) -> str:
         """Generate markdown content for the report"""
         lines = []
 
         # Header
-        lines.append("# API Governance Scan Report")
-        lines.append("")
-        lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append("")
+        lines.append(
+            ReportUtils.create_summary_header(
+                "API Governance Scan Report",
+                self.scan_result.project_path,
+                self.scan_result.scan_type,
+            )
+        )
 
         # Summary
         lines.append("## Executive Summary")
         lines.append("")
-        lines.append(f"- **Scan Type:** {self.scan_result.scan_type}")
-        lines.append(f"- **Project Path:** `{self.scan_result.project_path}`")
         lines.append(
             f"- **Specifications Analyzed:** {len(self.scan_result.spec_files)}"
         )
@@ -177,27 +179,7 @@ class ReportGenerator:
 
     def _format_violation(self, violation: Dict) -> List[str]:
         """Format a single violation"""
-        lines = []
-
-        severity_icon = {0: "🔴", 1: "🟡", 2: "🔵"}
-        severity_label = {0: "Error", 1: "Warning", 2: "Info"}
-
-        severity = violation.get("severity", 2)
-        icon = severity_icon.get(severity, "•")
-        label = severity_label.get(severity, "Unknown")
-
-        # Header
-        lines.append(f"{icon} **{label}:** {violation.get('rule', 'Unknown Rule')}")
-
-        # Message
-        lines.append(f"  - Message: {violation.get('message', 'N/A')}")
-
-        # Path and line
-        if violation.get("path"):
-            lines.append(f"  - Path: `{violation.get('path')}`")
-
-        if violation.get("line"):
-            lines.append(f"  - Line: {violation.get('line')}")
+        return [ReportUtils.format_violation_markdown(violation)]
 
         # LLM-generated context (enhanced explanation)
         if violation.get("llm_context"):

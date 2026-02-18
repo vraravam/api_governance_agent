@@ -1,6 +1,5 @@
 from typing import Optional, NamedTuple, List, Dict
 from pathlib import Path
-import yaml
 
 from scanner.project_detector import ProjectDetector
 from engines.spectral_runner import SpectralRunner
@@ -8,6 +7,7 @@ from engines.llm_analyzer import LLMAnalyzer
 from report.report_generator import ReportGenerator
 from autofix.category_manager import CategoryManager
 from utils.logger import logger
+from utils import FileUtils
 
 
 class ScanResult(NamedTuple):
@@ -156,16 +156,10 @@ class GovernanceScanner:
 
             # Load spec content for analysis (support both YAML and JSON)
             try:
-                with open(spec, "r", encoding="utf-8") as f:
-                    if spec.suffix == ".json":
-                        import json
-
-                        spec_content = json.load(f)
-                    else:
-                        spec_content = yaml.safe_load(f)
+                spec_content, _ = FileUtils.read_spec_file(str(spec))
             except Exception as e:
                 logger.warning(
-                    f"Failed to parse {spec.suffix.upper()} content for {spec}: {e}. Proceeding with Spectral check only."
+                    f"Failed to parse spec content for {spec}: {e}. Proceeding with Spectral check only."
                 )
                 spec_content = {}
 

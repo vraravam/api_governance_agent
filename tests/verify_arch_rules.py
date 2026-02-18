@@ -69,32 +69,32 @@ async def main():
     for v in violations:
         description = v.get("description", "").lower()
 
-        # Check for package violations
-        if "does not reside in" in description or "package" in description:
-            checks["package_violations"] = True
-            if not checks.get("printed_package"):
-                print(
-                    f"\n[SUCCESS] Package violation detected: {v.get('description')[:100]}..."
-                )
-                checks["printed_package"] = True
+    # Check for package violations
+    if "does not reside in" in description or "package" in description:
+        checks["package_violations"] = True
+        if not checks.get("printed_package"):
+            print(
+                f"\n[SUCCESS] Package violation detected: {v.get('description')[:100]}..."
+            )
+            checks["printed_package"] = True
 
-        # Check for naming violations
-        if "simple name" in description or "starting with" in description:
-            checks["naming_violations"] = True
-            if not checks.get("printed_naming"):
-                print(
-                    f"\n[SUCCESS] Naming violation detected: {v.get('description')[:100]}..."
-                )
-                checks["printed_naming"] = True
+    # Check for naming violations
+    if "simple name" in description or "starting with" in description:
+        checks["naming_violations"] = True
+        if not checks.get("printed_naming"):
+            print(
+                f"\n[SUCCESS] Naming violation detected: {v.get('description')[:100]}..."
+            )
+            checks["printed_naming"] = True
 
-        # Check for dependency violations (field access, controller-repository, etc)
-        if "field" in description or "gets field" in description:
-            checks["dependency_violations"] = True
-            if not checks.get("printed_dependency"):
-                print(
-                    f"\n[SUCCESS] Dependency violation detected: {v.get('description')[:100]}..."
-                )
-                checks["printed_dependency"] = True
+    # Check for dependency violations (field access, controller-repository, etc)
+    if "field" in description or "gets field" in description:
+        checks["dependency_violations"] = True
+        if not checks.get("printed_dependency"):
+            print(
+                f"\n[SUCCESS] Dependency violation detected: {v.get('description')[:100]}..."
+            )
+            checks["printed_dependency"] = True
 
     if any(checks.values()):
         print("\n[SUCCESS] Architecture validation test passed!")
