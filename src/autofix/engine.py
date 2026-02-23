@@ -4,7 +4,6 @@ Auto-Fix Engine - Main orchestrator for the auto-fix workflow
 Coordinates the entire fix proposal, review, and application process.
 """
 
-import json
 from typing import List, Dict, Optional
 from pathlib import Path
 from dataclasses import dataclass
@@ -17,6 +16,7 @@ from .vscode_integration import integrate_with_vscode
 from .build_validator import BuildValidator, ValidationResult
 from engines.llm_analyzer import LLMAnalyzer
 from engines.copilot_analyzer import CopilotAnalyzer
+from utils import FileUtils
 
 
 @dataclass
@@ -104,12 +104,7 @@ class AutoFixEngine:
             List of violation dictionaries
         """
 
-        report_file = Path(report_path)
-        if not report_file.exists():
-            raise FileNotFoundError(f"Governance report not found: {report_path}")
-
-        with open(report_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = FileUtils.read_json(report_path)
 
         # Handle different report formats
         if isinstance(data, list):

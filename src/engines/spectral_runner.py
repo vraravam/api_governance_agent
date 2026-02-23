@@ -1,8 +1,9 @@
-import subprocess
-import json
 from pathlib import Path
 from typing import List, Dict
 from utils.logger import logger
+from utils import ProcessUtils, FileUtils
+import tempfile
+import os
 
 
 class SpectralRunner:
@@ -15,9 +16,6 @@ class SpectralRunner:
         """Execute Spectral and return structured results"""
         try:
             # Use output file to avoid stdout buffer issues with large JSON
-            import tempfile
-            import os
-
             with tempfile.NamedTemporaryFile(
                 mode="w+", suffix=".json", delete=False
             ) as tmp:
@@ -36,7 +34,7 @@ class SpectralRunner:
                     output_file,
                 ]
 
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                result = ProcessUtils.run_command(cmd, timeout=60)
 
                 # Check for Spectral configuration errors in stderr
                 if result.stderr:
@@ -57,8 +55,7 @@ class SpectralRunner:
                 # Read JSON from output file (more reliable for large outputs)
                 if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
                     try:
-                        with open(output_file, "r", encoding="utf-8") as f:
-                            violations = json.load(f)
+                        violations = FileUtils.read_json(output_file)
 
                         # Handle case where violations is an empty list or has results
                         if isinstance(violations, list):
@@ -69,17 +66,14 @@ class SpectralRunner:
                         else:
                             logger.warning("Spectral returned unexpected JSON format")
                             return []
-                    except json.JSONDecodeError as e:
+                    except Exception as e:
                         logger.error(f"Failed to parse Spectral JSON output: {str(e)}")
                         # Try to read and show a sample of the problematic content
                         try:
-                            with open(
-                                output_file, "r", encoding="utf-8", errors="replace"
-                            ) as f:
-                                content = f.read()
-                                logger.debug(f"Output file size: {len(content)} chars")
-                                logger.debug(f"First 200 chars: {content[:200]}")
-                                logger.debug(f"Last 200 chars: {content[-200:]}")
+                            content = FileUtils.read_text(output_file)
+                            logger.debug(f"Output file size: {len(content)} chars")
+                            logger.debug(f"First 200 chars: {content[:200]}")
+                            logger.debug(f"Last 200 chars: {content[-200:]}")
                         except:
                             pass
                         return []
@@ -100,18 +94,16 @@ class SpectralRunner:
 
             return []
 
-        except subprocess.TimeoutExpired:
-            logger.error("Spectral execution timed out")
-            return []
-        except FileNotFoundError:
-            logger.error(
-                "Spectral CLI not found. Install with: npm install -g @stoplight/spectral-cli"
-            )
-            logger.error("Or ensure 'spectral' is in your PATH")
-            return []
         except Exception as e:
-            logger.error(f"Spectral execution failed: {str(e)}")
-            if "No such file or directory" in str(e) or "spectral" in str(e).lower():
+            if "timed out" in str(e).lower():
+                logger.error("Spectral execution timed out")
+            elif not ProcessUtils.check_binary_exists("spectral"):
+                logger.error(
+                    "Spectral CLI not found. Install with: npm install -g @stoplight/spectral-cli"
+                )
+                logger.error("Or ensure 'spectral' is in your PATH")
+            else:
+                logger.error(f"Spectral execution failed: {str(e)}")
                 logger.error(
                     "💡 Hint: Install Spectral with: npm install -g @stoplight/spectral-cli"
                 )
@@ -119,17 +111,6 @@ class SpectralRunner:
 
     def _structure_violations(self, violations: List[Dict]) -> List[Dict]:
         """Convert Spectral output to structured format"""
-        structured = []
-        for v in violations:
-            structured.append(
-                {
-                    "rule": v.get("code", "unknown"),
-                    "severity": v.get("severity", 0),  # 0=error, 1=warning, 2=info
-                    "message": v.get("message", ""),
-                    "path": ".".join(str(p) for p in v.get("path", [])),
-                    "line": v.get("range", {}).get("start", {}).get("line", 0),
-                    "source": v.get("source", ""),
-                    "engine": "spectral",
-                }
-            )
-        return structured
+        from utils import ViolationUtils
+
+        return [ViolationUtils.normalize_spectral_violation(v) for v in violations]

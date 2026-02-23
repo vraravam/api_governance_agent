@@ -10,25 +10,19 @@ Into a single comprehensive governance-report.json file that can be used
 by the copilot_fix command.
 """
 
-import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Any
 
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils import FileUtils, ViolationUtils
+
 
 def load_json_file(file_path: str) -> Dict[str, Any]:
     """Load JSON file, return empty dict if not found."""
-    path = Path(file_path)
-    if not path.exists():
-        print(f"⚠️  Warning: File not found: {file_path}")
-        return {}
-
-    try:
-        with open(path, "r") as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"❌ Error parsing {file_path}: {e}")
-        return {}
+    return FileUtils.read_json_safe(file_path, {})
 
 
 def normalize_openapi_violations(openapi_data: Dict) -> List[Dict]:
@@ -94,25 +88,8 @@ def normalize_archunit_violations(archunit_data: Dict) -> List[Dict]:
     }
     """
     violations = []
-
     for v in archunit_data.get("violations", []):
-        violation = {
-            "rule": v.get("rule", "unknown-rule"),
-            "message": v.get("violation", v.get("message", v.get("description", ""))),
-            "file": v.get("file", "unknown"),
-            "class": v.get("class", ""),
-            "severity": v.get("severity", "ERROR"),
-            "description": v.get("description", ""),
-            "type": "architecture",
-        }
-
-        # Include line number if available (from ArchUnit engine parsing)
-        # Don't set line=0 as default - only include if actually present
-        if "line" in v and v["line"] is not None and v["line"] != 0:
-            violation["line"] = v["line"]
-
-        violations.append(violation)
-
+        violations.append(ViolationUtils.normalize_archunit_violation(v))
     return violations
 
 
@@ -142,15 +119,11 @@ def merge_reports(
     api_violations = normalize_openapi_violations(openapi_data)
     arch_violations = normalize_archunit_violations(archunit_data)
 
-    all_violations = api_violations + arch_violations
+    all_violations = ViolationUtils.merge_violations(api_violations, arch_violations)
 
     # Count by type and severity
     by_type = {"api": len(api_violations), "architecture": len(arch_violations)}
-
-    severity_counts = {}
-    for v in all_violations:
-        severity = str(v.get("severity", "unknown")).upper()
-        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+    severity_counts = ViolationUtils.count_by_severity(all_violations)
 
     # Create merged report
     merged_report = {
@@ -167,11 +140,9 @@ def merge_reports(
     }
 
     # Save merged report
-    output_path = Path(output_file)
-    with open(output_path, "w") as f:
-        json.dump(merged_report, f, indent=2)
+    FileUtils.write_json(output_file, merged_report)
 
-    print(f"✅ Merged report saved to: {output_path}")
+    print(f"✅ Merged report saved to: {output_file}")
     print("\n📊 Summary:")
     print(f"   Total violations: {len(all_violations)}")
     print(f"   - API violations: {len(api_violations)}")

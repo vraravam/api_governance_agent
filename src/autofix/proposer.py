@@ -6,7 +6,6 @@ This module takes governance violations and proposes minimal, safe fixes.
 
 import os
 import re
-import yaml
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -15,6 +14,7 @@ from .fix_strategies import FixStrategy, FixComplexity, FixSafety, get_strategy
 from engines.llm_analyzer import LLMAnalyzer
 from engines.copilot_analyzer import CopilotAnalyzer
 from utils.logger import logger
+from utils import PathUtils
 import asyncio
 
 
@@ -105,47 +105,19 @@ class FixProposer:
         Returns:
             List of test file paths (relative to project root)
         """
-        test_files = []
         java_path_obj = Path(java_class_path)
-
-        # Extract class name (e.g., "UserService")
         class_name = java_path_obj.stem
 
-        # For controllers, also try without "Controller" suffix
-        base_name = class_name.replace("Controller", "")
+        # Use PathUtils to find test files
+        test_files = PathUtils.find_test_files_for_class(
+            str(self.project_path), class_name
+        )
 
-        # Common test file patterns - covers all standard naming conventions
-        test_patterns = [
-            # Exact class name tests
-            f"**/{class_name}Test.java",
-            f"**/{class_name}Tests.java",
-            f"**/{class_name}TestCase.java",
-            # Integration tests
-            f"**/{class_name}IntegrationTest.java",
-            f"**/{class_name}IT.java",
-            f"**/{class_name}IntegrationTests.java",
-            # For controllers, also try base name patterns
-            f"**/{base_name}ControllerTest.java",
-            f"**/{base_name}ControllerTests.java",
-            f"**/{base_name}ControllerIT.java",
-            # Test directories with wildcard (catches custom naming)
-            f"**/test/**/{class_name}*.java",
-            f"**/tests/**/{class_name}*.java",
-            f"**/src/test/**/{class_name}*.java",
+        # Convert to relative paths
+        return [
+            PathUtils.get_relative_path(str(f), str(self.project_path))
+            for f in test_files
         ]
-
-        for pattern in test_patterns:
-            for test_file in self.project_path.rglob(pattern):
-                # Verify it's actually in a test directory
-                test_file_str = str(test_file)
-                if (
-                    "/test/" in test_file_str or "/tests/" in test_file_str
-                ) and "Test" in test_file.stem:
-                    rel_path = str(test_file.relative_to(self.project_path))
-                    if rel_path not in test_files:
-                        test_files.append(rel_path)
-
-        return test_files
 
     def _find_test_files_for_controller(self, controller_path: str) -> List[str]:
         """

@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Tuple, List, Optional
-import yaml
-import json
+from utils import FileUtils, ProjectUtils
 
 
 class ProjectDetector:
@@ -36,13 +35,7 @@ class ProjectDetector:
 
     def is_java_project(self) -> Tuple[bool, str]:
         """Check if directory contains a Java project"""
-        if (self.project_path / "pom.xml").exists():
-            return True, "maven"
-        if (self.project_path / "build.gradle").exists() or (
-            self.project_path / "build.gradle.kts"
-        ).exists():
-            return True, "gradle"
-        return False, "unknown"
+        return ProjectUtils.detect_build_tool(str(self.project_path))
 
     def find_openapi_specs(self) -> List[Path]:
         """Locate all OpenAPI specification files (YAML and JSON)"""
@@ -76,46 +69,38 @@ class ProjectDetector:
 
     def _is_valid_spec_location(self, path: Path) -> bool:
         """Filter out build artifacts (but allow test directories for sample specs)"""
-        path_str = str(path)
-        exclude_patterns = ["target/", "build/", "node_modules/", ".gradle/"]
-        return not any(pattern in path_str for pattern in exclude_patterns)
+        return not ProjectUtils.should_exclude_path(str(path), str(self.project_path))
 
     def validate_spec_syntax(self, spec_path: Path) -> Tuple[bool, Optional[str]]:
         """Validate that the spec is valid YAML/JSON and contains OpenAPI content"""
         try:
-            with open(spec_path, "r", encoding="utf-8") as f:
-                content = f.read()
+            # Parse based on file extension
+            data, file_format = FileUtils.read_spec_file(str(spec_path))
 
-                # Parse based on file extension
-                if spec_path.suffix in [".yaml", ".yml"]:
-                    data = yaml.safe_load(content)
-                elif spec_path.suffix == ".json":
-                    data = json.loads(content)
-                else:
-                    return False, f"Unsupported file format: {spec_path.suffix}"
+            # Handle case where data is None or not a dict
+            if not isinstance(data, dict):
+                return (
+                    False,
+                    f"Invalid {file_format.upper()}: Expected object/dict at root, got {type(data).__name__}",
+                )
 
-                # Handle case where data is None or not a dict
-                if not isinstance(data, dict):
-                    return (
-                        False,
-                        "File does not contain a valid OpenAPI specification structure",
-                    )
+            # Basic OpenAPI structure validation
+            if "openapi" not in data and "swagger" not in data:
+                return (
+                    False,
+                    "Not a valid OpenAPI/Swagger specification (missing 'openapi' or 'swagger' field)",
+                )
 
-                # Basic OpenAPI structure validation
-                if "openapi" not in data and "swagger" not in data:
-                    return (
-                        False,
-                        "Not a valid OpenAPI/Swagger specification (missing 'openapi' or 'swagger' field)",
-                    )
+            return True, None
 
-                return True, None
-
-        except yaml.YAMLError as e:
-            # Report syntax error but don't block scanning if it's a minor YAML issue that Spectral might catch as a rule violation
-            # e.g. "mapping values are not allowed here" in a description string
-            return True, f"YAML syntax warning: {str(e)}"
-        except json.JSONDecodeError as e:
-            return False, f"JSON syntax error: {str(e)}"
+        except ValueError as e:
+            # Handle JSON/YAML parsing errors
+            error_msg = str(e)
+            if "yaml" in error_msg.lower():
+                # YAML syntax warning - might be caught by Spectral
+                return True, f"YAML syntax warning: {error_msg}"
+            else:
+                return False, f"Syntax error: {error_msg}"
         except Exception as e:
             # If we can't read the file at all, fail
             return False, f"Error reading file: {str(e)}"

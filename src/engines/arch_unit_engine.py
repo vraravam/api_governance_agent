@@ -1,10 +1,10 @@
 import os
-import subprocess
 import requests
-import json
+import subprocess
 from pathlib import Path
 from typing import List, Dict, Optional
 from utils.logger import logger
+from utils import ProcessUtils, PathUtils
 
 
 class ArchUnitEngine:
@@ -58,11 +58,12 @@ class ArchUnitEngine:
     def _compile_runner(self):
         """Compile the Java runner"""
         classpath = self._get_classpath()
-        cmd = ["javac", "-cp", classpath, str(self.runner_src)]
 
-        logger.info(f"Compiling ArchUnitRunner: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
+        result = ProcessUtils.compile_java(
+            str(self.runner_src), classpath, str(self.resources_dir)
+        )
+
+        if not result.success:
             logger.error(f"Compilation failed: {result.stderr}")
             raise RuntimeError("Failed to compile ArchUnitRunner")
 
@@ -78,26 +79,19 @@ class ArchUnitEngine:
         Returns:
             Path to compiled classes directory, or project root if not found
         """
-        # Gradle structure
-        gradle_main = self.project_path / "build" / "classes" / "java" / "main"
-        if gradle_main.exists() and gradle_main.is_dir():
-            logger.info(f"✅ Found Gradle compiled classes: {gradle_main}")
-            return gradle_main
+        classes_dir = PathUtils.find_compiled_classes_dir(str(self.project_path))
 
-        # Maven structure
-        maven_classes = self.project_path / "target" / "classes"
-        if maven_classes.exists() and maven_classes.is_dir():
-            logger.info(f"✅ Found Maven compiled classes: {maven_classes}")
-            return maven_classes
+        if classes_dir == self.project_path:
+            logger.warning(
+                f"⚠️  Compiled classes not found. Using project root: {self.project_path}"
+            )
+            logger.warning(
+                "⚠️  ArchUnit will scan source files. Run 'gradle build' or 'mvn compile' first for better results."
+            )
+        else:
+            logger.info(f"✅ Found compiled classes: {classes_dir}")
 
-        # Fallback: ArchUnit can import from source, but test filtering may not work
-        logger.warning(
-            f"⚠️  Compiled classes not found. Using project root: {self.project_path}"
-        )
-        logger.warning(
-            "⚠️  ArchUnit will scan source files. Run 'gradle build' or 'mvn compile' first for better results."
-        )
-        return self.project_path
+        return classes_dir
 
     def _resolve_java_file_path(
         self, filename: str, violation_message: str
@@ -117,79 +111,33 @@ class ArchUnitEngine:
         Returns:
             Path object if file found, None otherwise
         """
-        import re
+        # Extract FQCN from message
+        fqcn = PathUtils.extract_fqcn_from_message(violation_message)
 
-        # Strategy 1: Extract FQCN (Fully Qualified Class Name) from message
-        # Pattern: <com.example.package.ClassName> or <com.example.package.ClassName$InnerClass>
-        class_match = re.search(r"<([\w\.]+)>", violation_message)
-        if class_match:
-            fqcn = class_match.group(1)
+        if fqcn:
+            # Try to resolve using FQCN
+            resolved = PathUtils.resolve_java_file_path(str(self.project_path), fqcn)
+            if resolved:
+                logger.debug(f"Resolved {filename} -> {resolved}")
+                return resolved
 
-            # Handle inner classes: com.example.MyClass$Inner -> com.example.MyClass
-            if "$" in fqcn:
-                fqcn = fqcn.split("$")[0]
+        # Fallback: search by filename
+        matches = PathUtils.find_files(
+            str(self.project_path),
+            f"**/{filename}",
+            exclude_patterns=["target/", "build/", ".gradle/"],
+        )
 
-            # Convert FQCN to path: com.example.MyClass -> com/example/MyClass.java
-            rel_path = fqcn.replace(".", "/") + ".java"
-
-            # Search in common Java source directories
-            common_source_dirs = [
-                "src/main/java",  # Maven/Gradle main
-                "src/test/java",  # Maven/Gradle test
-                "src",  # Simple structure
-                "test",  # Simple test structure
-                "java",  # Alternative structure
-                "",  # Root level
-            ]
-
-            for src_dir in common_source_dirs:
-                if src_dir:
-                    full_path = self.project_path / src_dir / rel_path
-                else:
-                    full_path = self.project_path / rel_path
-
-                if full_path.exists():
-                    logger.debug(f"Resolved {filename} -> {full_path}")
-                    return full_path
-
-        # Strategy 2: Direct search in common directories
-        for src_dir in ["src/main/java", "src/test/java", "src", "test", "com", ""]:
-            search_root = self.project_path / src_dir if src_dir else self.project_path
-            if search_root.exists():
-                matches = list(search_root.rglob(filename))
-                if matches:
-                    # If multiple matches, prefer ones in src/main/java
-                    for match in matches:
-                        # Use Path.parts to be platform-independent
-                        if (
-                            "src" in match.parts
-                            and "main" in match.parts
-                            and "java" in match.parts
-                        ):
-                            logger.debug(
-                                f"Resolved {filename} -> {match} (preferred main source)"
-                            )
-                            return match
-                    # Otherwise return first match
-                    logger.debug(f"Resolved {filename} -> {matches[0]}")
-                    return matches[0]
-
-        # Strategy 3: Recursive search as last resort
-        matches = list(self.project_path.rglob(filename))
         if matches:
-            # Prefer files not in build/target directories
+            # Prefer files in src/main/java
             for match in matches:
-                # Use Path.parts to be platform-independent
-                match_parts = match.parts
-                excluded = any(
-                    excl in match_parts
-                    for excl in ["target", "build", ".gradle", "node_modules"]
-                )
-                if not excluded:
-                    logger.debug(f"Resolved {filename} -> {match} (recursive search)")
+                if "src/main/java" in str(match):
+                    logger.debug(
+                        f"Resolved {filename} -> {match} (preferred main source)"
+                    )
                     return match
-            # If all are in build dirs, just return first
-            logger.debug(f"Resolved {filename} -> {matches[0]} (in build dir)")
+            # Otherwise return first match
+            logger.debug(f"Resolved {filename} -> {matches[0]}")
             return matches[0]
 
         # Could not resolve
