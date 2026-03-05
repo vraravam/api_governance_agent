@@ -1,0 +1,473 @@
+# API Governance - Spectral Ruleset
+# Based on John Deere API Style Guide
+# This ruleset enforces deterministic structural rules
+
+extends: [[spectral:oas, off]]
+
+functions:
+  - plural-check
+  - verb-check
+  - nested-depth-check
+  - camelcase-check
+  - pagination-response-check
+  - uuid-format-check
+  - response-envelope-check
+
+functionsDir: ./custom-functions
+
+rules:
+  # ============================================
+  # RESOURCE NAMING CONVENTIONS
+  # ============================================
+
+  kebab-case-paths:
+    description: "Resource names must use lowercase with hyphens (kebab-case)"
+    message: "Path segment '{{property}}' must be kebab-case (lowercase with hyphens)"
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: "^(/[a-z0-9-]+|/v[0-9]+|/\\{[a-zA-Z0-9]+\\})*$"
+
+  plural-resources:
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: plural-check
+      functionOptions: {}
+
+  no-verbs-in-url:
+    description: "Use nouns instead of verbs in URIs"
+    message: "Path '{{property}}' contains verb. Use reified resources instead (e.g., POST /activations not /activate)"
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: verb-check
+      functionOptions: {}
+
+  no-crud-names:
+    description: "Do not use CRUD function names in URIs"
+    message: "Path '{{property}}' contains CRUD operation name. Use HTTP verbs instead"
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "/(get|create|update|delete|post|put|patch|remove|add)[A-Z]"
+
+  no-trailing-slash:
+    description: "Do not use trailing forward slash in URIs"
+    message: "Path '{{property}}' has trailing slash - remove it"
+    severity: warn
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "/$"
+
+  no-file-extensions:
+    description: "Do not use file extensions in URIs"
+    message: "Path '{{property}}' contains file extension. Use Content-Type header instead"
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "\\.(json|xml|yaml|html)$"
+
+  # ============================================
+  # API STRUCTURE & VERSIONING
+  # ============================================
+
+  versioning-required:
+    description: "Put the API version in the URIs (e.g., /v1/resource)"
+    message: "Path '{{property}}' must start with version (e.g., /v1/)"
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: "^/v[0-9]+"
+
+  uuid-resource-ids:
+    description: "Use UUID for all resource identifiers"
+    message: "Path parameter '{{property}}' should use UUID format, not integer"
+    severity: error
+    given: $.paths..parameters[?(@.in == 'path' && @.name.match(/id$/i))]
+    then:
+      function: uuid-format-check
+      functionOptions: {}
+
+  nested-resources-depth:
+    description: "Nested resources should not be more than 2 levels"
+    message: "Path '{{property}}' has too many nesting levels (max 2). Consider top-level resources"
+    severity: warn
+    given: $.paths[*]~
+    then:
+      function: nested-depth-check
+      functionOptions:
+        maxLevels: 2
+
+  # ============================================
+  # PAGINATION & QUERY PARAMETERS
+  # ============================================
+
+  pagination-parameter-naming:
+    description: "Pagination must use page[size] and page[number]"
+    message: "Use 'page[size]' and 'page[number]' for pagination, not '{{property}}'"
+    severity: error
+    given: $.paths..parameters[?(@.in == 'query' && (@.name.match(/limit|offset|pagesize|pagenumber|page_/i)))]
+    then:
+      field: name
+      function: pattern
+      functionOptions:
+        match: "^(page\\[size\\]|page\\[number\\])$"
+
+  page-size-max-limit:
+    description: "page[size] should have a max limitation"
+    message: "Parameter 'page[size]' must define maximum value"
+    severity: error
+    given: $.paths..parameters[?(@.name == 'page[size]')]
+    then:
+      field: schema.maximum
+      function: defined
+
+  pagination-params-optional:
+    description: "page[number] and page[size] should be optional with defaults"
+    message: "Pagination parameter '{{property}}' should be optional"
+    severity: warn
+    given: $.paths..parameters[?(@.name.match(/^page\[/))]
+    then:
+      field: required
+      function: falsy
+
+  pagination-positive-integers:
+    description: "page[number] and page[size] should be positive integers"
+    message: "Pagination parameter '{{property}}' must be integer with minimum 1"
+    severity: error
+    given: $.paths..parameters[?(@.name.match(/^page\[/))]
+    then:
+      - field: schema.type
+        function: pattern
+        functionOptions:
+          match: "integer"
+      - field: schema.minimum
+        function: pattern
+        functionOptions:
+          match: "^[1-9]"
+
+  pagination-check:
+    description: "Paginated responses should include totalItems"
+    message: "Paginated responses should include totalItems for client-side pagination"
+    severity: warn
+    given: $.paths[*].get
+    then:
+      function: pagination-response-check
+      functionOptions: {}
+
+  query-params-camelcase:
+    description: "Query parameters must be lowerCamelCase (except pagination and filtering)"
+    message: "Query parameter '{{value}}' must be lowerCamelCase (e.g., 'firstName' not 'first_name')"
+    severity: error
+    given: $.paths..parameters[?(@.in == 'query' && !(@.name.match(/^page\[/) || @.name.match(/^sort$/) || @.name.match(/^filter\[/)))]
+    then:
+      function: camelcase-check
+      functionOptions: {}
+
+  # ============================================
+  # REQUEST/RESPONSE STRUCTURE
+  # ============================================
+
+  request-body-json:
+    description: "RequestBody must be JSON format"
+    message: "Request body must use 'application/json' content type"
+    severity: error
+    given: $.paths..requestBody.content
+    then:
+      field: application/json
+      function: defined
+
+  json-content-type-header:
+    description: "Clients and servers MUST send Content-Type: application/json"
+    message: "Response must include 'application/json' content type"
+    severity: error
+    given: $.paths..responses[*].content
+    then:
+      field: application/json
+      function: defined
+
+  request-fields-camelcase:
+    description: "Request body field names must be lowerCamelCase"
+    message: "Field '{{property}}' must be lowerCamelCase"
+    severity: error
+    given: $.paths..requestBody..properties[*]~
+    then:
+      function: camelcase-check
+      functionOptions: {}
+
+  response-fields-camelcase:
+    description: "Response body field names must be lowerCamelCase"
+    message: "Field '{{property}}' must be lowerCamelCase"
+    severity: error
+    given: $.paths..responses..properties[*]~
+    then:
+      function: camelcase-check
+      functionOptions: {}
+
+  array-fields-plural:
+    description: "Fields that represent arrays should be named using plural nouns"
+    message: "Array field '{{property}}' should use plural noun"
+    severity: warn
+    given: $.paths..[?(@.type == 'array')]~
+    then:
+      function: pattern
+      functionOptions:
+        match: "s$|List$"
+
+  no-boolean-prefixes:
+    description: "Do not use 'is_' or 'has_' prefixes for boolean fields"
+    message: "Boolean field '{{property}}' should not use 'is_' or 'has_' prefix"
+    severity: warn
+    given: $.paths..[?(@.type == 'boolean')]~
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "^(is_|has_|is[A-Z]|has[A-Z])"
+
+  # ============================================
+  # RESPONSE ENVELOPE & STATUS CODES
+  # ============================================
+
+  response-envelope:
+    description: "Response envelope must follow structure: success has 'data', errors has 'errors'"
+    message: "Response envelope structure is incorrect"
+    severity: error
+    given: $.paths..responses[*]
+    then:
+      function: response-envelope-check
+      functionOptions: {}
+
+  error-structure-complete:
+    description: "Error response must include type, description, details with field, code, message"
+    message: "Error object must have required fields: type, description, details"
+    severity: error
+    given: $.paths..responses[?(@property.match(/^[45]/))].content..properties.errors
+    then:
+      - field: properties.type
+        function: defined
+      - field: properties.description
+        function: defined
+      - field: properties.details
+        function: defined
+
+  error-details-structure:
+    description: "Error details must include field, code, message, developerMessage"
+    message: "Error details item must have: field, code, message, developerMessage"
+    severity: error
+    given: $.paths..responses[?(@property.match(/^[45]/))].content..properties.errors.properties.details.items
+    then:
+      - field: properties.field
+        function: defined
+      - field: properties.code
+        function: defined
+      - field: properties.message
+        function: defined
+      - field: properties.developerMessage
+        function: defined
+
+  standard-status-codes:
+    description: "Use only standard HTTP status codes"
+    message: "Response status '{{property}}' is not a standard HTTP code"
+    severity: error
+    given: $.paths..responses[*]~
+    then:
+      function: enumeration
+      functionOptions:
+        values:
+          - "200"
+          - "201"
+          - "202"
+          - "204"
+          - "207"
+          - "301"
+          - "304"
+          - "400"
+          - "401"
+          - "403"
+          - "404"
+          - "405"
+          - "409"
+          - "500"
+          - "503"
+
+  created-returns-resource:
+    description: "201 Created should return the created resource"
+    message: "201 response should include response body with created resource"
+    severity: warn
+    given: $.paths..responses[?(@property == '201')]
+    then:
+      field: content
+      function: defined
+
+  # ============================================
+  # DATA TYPES & FORMATS
+  # ============================================
+
+  datetime-iso8601:
+    description: "Use ISO 8601 format for datetime (yyyy-MM-dd'T'HH:mm:ss.SSS'Z')"
+    message: "DateTime field '{{property}}' should use 'date-time' format (ISO 8601)"
+    severity: error
+    given: $.paths..[?(@.format == 'date' || @.format == 'date-time')]
+    then:
+      field: format
+      function: pattern
+      functionOptions:
+        match: "^date-time$"
+
+  currency-code-iso4217:
+    description: "Use ISO 4217 three letter code for currency"
+    message: "Currency code field should be 3 uppercase letters (ISO 4217)"
+    severity: error
+    given: $.paths..properties[?(@property.match(/currency/i) || @property == 'currency')]
+    then:
+      - field: type
+        function: pattern
+        functionOptions:
+          match: "string"
+      - field: pattern
+        function: pattern
+        functionOptions:
+          match: "^[A-Z]{3}$"
+
+  country-code-iso3166:
+    description: "Use ISO 3166 two letter code for country"
+    message: "Country code field should be 2 uppercase letters (ISO 3166)"
+    severity: error
+    given: $.paths..properties[?(@property.match(/countryCode/i))]
+    then:
+      - field: type
+        function: pattern
+        functionOptions:
+          match: "string"
+      - field: pattern
+        function: pattern
+        functionOptions:
+          match: "^[A-Z]{2}$"
+
+  money-object-structure:
+    description: "Money should be object with 'amount' and 'currency' properties"
+    message: "Money field '{{property}}' should have 'amount' (number) and 'currency' (string) properties"
+    severity: error
+    given: $.paths..properties[?(@property.match(/price|cost|fee|amount/i) && @.type == 'object')]
+    then:
+      - field: properties.amount
+        function: defined
+      - field: properties.currency
+        function: defined
+
+  enum-uppercase-underscore:
+    description: "Enum values should be UPPERCASE_SEPARATED_BY_UNDERSCORE"
+    message: "Enum value must be uppercase with underscores"
+    severity: error
+    given: $.paths..[?(@.enum)]
+    then:
+      field: enum[*]
+      function: pattern
+      functionOptions:
+        match: "^[A-Z][A-Z0-9_]*$"
+
+  # ============================================
+  # HTTP VERB SEMANTICS
+  # ============================================
+
+  get-no-request-body:
+    description: "GET requests should not have request body"
+    message: "GET operation should not define requestBody"
+    severity: error
+    given: $.paths[*].get
+    then:
+      field: requestBody
+      function: undefined
+
+  delete-idempotent:
+    description: "DELETE should be idempotent (404 or 204 on already deleted)"
+    message: "DELETE should return 204 or 404, not error on repeated calls"
+    severity: hint
+    given: $.paths[*].delete.responses
+    then:
+      - field: "204"
+        function: defined
+
+  post-create-returns-201:
+    description: "POST for creation should return 201 Created"
+    message: "POST operation should return 201 when creating resources"
+    severity: warn
+    given: $.paths[*].post.responses
+    then:
+      field: "201"
+      function: defined
+
+  # ============================================
+  # DOCUMENTATION & DESCRIPTIONS
+  # ============================================
+
+  operation-summary-required:
+    description: "All operations must have a summary"
+    message: "Operation '{{property}}' must have a summary"
+    severity: error
+    given: $.paths[*][*]
+    then:
+      field: summary
+      function: defined
+
+  operation-description-required:
+    description: "All operations should have a description"
+    message: "Operation '{{property}}' should have a description"
+    severity: warn
+    given: $.paths[*][*]
+    then:
+      field: description
+      function: defined
+
+  parameter-description-required:
+    description: "All parameters must have descriptions"
+    message: "Parameter '{{value}}' must have a description"
+    severity: error
+    given: $.paths..parameters[*]
+    then:
+      field: description
+      function: defined
+
+  schema-description-required:
+    description: "All schema properties should have descriptions"
+    message: "Schema property '{{property}}' should have a description"
+    severity: warn
+    given: $.paths..properties[*]
+    then:
+      field: description
+      function: defined
+
+  # ============================================
+  # SECURITY & HEADERS
+  # ============================================
+
+  security-defined:
+    description: "API should define security schemes"
+    message: "OpenAPI spec should define security schemes"
+    severity: warn
+    given: $
+    then:
+      field: components.securitySchemes
+      function: defined
+
+  accept-language-header:
+    description: "Support Accept-Language header for i18n"
+    message: "Consider supporting Accept-Language header for internationalization"
+    severity: hint
+    given: $.paths..parameters[?(@.in == 'header')]
+    then:
+      field: name
+      function: pattern
+      functionOptions:
+        match: "Accept-Language"

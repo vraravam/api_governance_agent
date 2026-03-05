@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  api-governance:
+    build: .
+    image: api-governance:latest
+    volumes:
+      - ${PROJECT_PATH:-.}:/project
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://localhost:11434}
+    command: scan --project /project --output /project/api-governance-report.md
